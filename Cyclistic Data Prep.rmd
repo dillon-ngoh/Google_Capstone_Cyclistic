@@ -1,0 +1,161 @@
+---
+title: "Cyclistic Case Study Data Prep"
+author: "Dillon Ngoh"
+date: "2023-05-16"
+output: pdf_document
+---
+
+
+
+## Packages and setup
+
+I utilized the tidyverse and ggplot2 packages for cleaning, prepping, and visualizing the data. The work directory where the data is located can be set manually in RStudio or using the setwd() function.
+
+```{r message=FALSE}
+library(tidyverse)
+library(ggplot2)
+
+#setwd("C:/Users/....") 
+```
+
+
+#Importing and merging
+
+The most recent 12 months data was downloaded from [here](https://divvy-tripdata.s3.amazonaws.com/index.html). They were stored and the number of rows, columns, and column specifications for the first three are shown.
+
+```{r}
+may2022 <- read_csv("202205-divvy-tripdata.csv")
+jun2022 <- read_csv("202206-divvy-tripdata.csv")
+jul2022 <- read_csv("202207-divvy-tripdata.csv")
+```
+
+
+```{r message=FALSE, warning=FALSE}
+aug2022 <- read_csv("202208-divvy-tripdata.csv")
+sep2022 <- read_csv("202209-divvy-tripdata.csv")
+oct2022 <- read_csv("202210-divvy-tripdata.csv")
+nov2022 <- read_csv("202211-divvy-tripdata.csv")
+dec2022 <- read_csv("202212-divvy-tripdata.csv")
+jan2023 <- read_csv("202301-divvy-tripdata.csv")
+feb2023 <- read_csv("202302-divvy-tripdata.csv")
+mar2023 <- read_csv("202303-divvy-tripdata.csv")
+apr2023 <- read_csv("202304-divvy-tripdata.csv")
+```
+
+
+I used the str() function to check the other tables for variation before merging the tables together. They all had the same column names and data types which made merging them simple.
+
+```{r}
+str(may2022)
+str(jun2022)
+str(jan2023)
+str(apr2023)
+```
+
+After merging all the data together, I checked the table to make sure the number of rows and columns match up and the total number of members vs casuals for reference after manipulating the data.
+
+```{r}
+trips <- bind_rows(may2022, jun2022, jul2022, aug2022, sep2022, oct2022, nov2022, dec2022, jan2023, feb2023, mar2023, apr2023)
+str(trips)
+table(trips$member_casual)
+```
+
+
+## Cleaning and preparing the data
+
+I removed ride_id, latitude, and longitude as I was not going to utilize that information in my visualizations. It also saves some time and space when importing and downloading data. If I ever needed or thought it could be important to my analysis it I could always return and add them back.
+
+```{r}
+trips <- trips %>% 
+  select(-c(ride_id, start_lat, start_lng, end_lat, end_lng))
+```
+
+
+I wanted to be able to visualize casual and member cyclists differences by day of the week, so I added a day of the week column using the column containing the date of the trip. Using the table() function allowed me to quickly see the most rides occurred on Saturdays.
+
+For the sake of visualizing riders by month in RStudio, I also created a column for that.
+
+```{r}
+trips$date <- as.Date(trips$started_at)
+trips$day_of_week <- format(as.Date(trips$date), "%A")
+trips$month <- format(as.Date(trips$date), "%B")
+
+table(trips$day_of_week)
+table(trips$month)
+```
+
+
+Using the start and end times, I made a column for the length of the trip in minutes rounded to 2 decimals places.
+The str() function shows the changes made to the dataframe.
+
+```{r}
+trips$ride_length <- round(difftime(trips$ended_at, trips$started_at, units='mins'), 2)
+trips$ride_length <- as.numeric(as.character(trips$ride_length))
+
+str(trips)
+```
+
+Here I wanted to check whether there were trips that had no time, were at 0 or negative minutes, or were greater than 24 hours.
+
+```{r}
+filter(trips, is.null(ride_length))
+filter(trips, ride_length <= 0)
+filter(trips, ride_length >= 1440)
+```
+
+The above showed 544 trips with 0 or negative minutes and 5345 trips longer than 24 hours so those were removed.
+
+```{r}
+trips_v2 <- trips[!(trips$ride_length <= 0 | trips$ride_length > 1440),]
+
+str(trips_v2)
+table(trips_v2$member_casual)
+```
+
+## Preliminary analysis and visualization
+
+I wanted to organize the days of the week and month in chronological order so that it appears as Sunday through Saturday for the week. For the month it should appear as January through December. Then I would be able to see the average ride length for casual vs member cyclists. 
+
+
+```{r}
+trips_v2$day_of_week <- ordered(trips_v2$day_of_week, levels=c("Sunday", "Monday", "Tuesday", "Wednesday", 
+                                                               "Thursday", "Friday", "Saturday"))
+
+trips_v2$month <- ordered(trips_v2$month, levels=c("January", "February", "March", "April", "May", "June", 
+                                                               "July", "August", "September", "October", "November", "December"))
+
+
+aggregate(trips_v2$ride_length ~ trips_v2$member_casual + trips_v2$day_of_week, FUN = function(x) {round(mean(x), 2)} ) 
+```
+
+
+
+Here you can easily see the number of rides peaks in the summertime where member riders peak in August and casual riders peak in July.
+
+```{r}
+ggplot(data = trips_v2, aes(x = month, fill = member_casual)) +
+  geom_bar(stat="count", position = "dodge") +
+  theme(axis.text.x = element_text(angle = 45))
+
+```
+
+You can see average ride length is greater on the weekends for casual riders while it is a couple minutes greater on the weekends for member riders, but otherwise fairly consistent throughout the weekdays for members.
+
+```{r}
+trips_v2 %>% 
+  mutate(weekday = wday(started_at, label = TRUE)) %>%  
+  group_by(member_casual, weekday) %>%  
+  summarise(number_of_rides = n(), average_ride_length = mean(ride_length)) %>% 		
+  arrange(member_casual, weekday) %>%
+  ggplot (aes(x = weekday, y = average_ride_length, fill = member_casual)) + 
+          geom_col(position = "dodge")
+
+```
+
+
+After cleaning and prepping the data, the data is ready to be exported as a csv where I utilized Tableau Public for further analysis.
+
+```{r message=FALSE, warning=FALSE}
+write.csv(trips_v2, 'trips_dataset.csv')
+```
+

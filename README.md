@@ -1,4 +1,4 @@
-# Google_Capstone_Cyclistic
+# Capstone Project for Google Analytics Certificate
 
 
 This was my capstone Google Data Analytics project about the company Cyclistic. This case study focuses on finding strategies to convert casual cyclists into members. It sifts through over 5.6 million records of cyclist trips and analyzes the relationships between casual and member riders.
